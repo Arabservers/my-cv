@@ -38,6 +38,28 @@
         </div>
     </nav>
 
+    <!-- Progress Bar -->
+    <div class="cv-progress-container">
+        <div class="cv-progress-bar">
+            <div class="cv-progress-fill" id="progressFill" style="width: 0%"></div>
+        </div>
+        <div class="cv-progress-info">
+            <span class="cv-progress-text">إكمال السيرة: <strong id="progressPercent">0%</strong></span>
+            <span class="cv-progress-tip" id="progressTip">💡 ابدأ بإضافة معلوماتك الشخصية</span>
+        </div>
+    </div>
+
+    <!-- Smart Tips Panel -->
+    <div class="smart-tips-panel" id="smartTipsPanel">
+        <div class="smart-tips-header">
+            <span><i class="fas fa-lightbulb"></i> نصائح ذكية</span>
+            <button onclick="toggleTipsPanel()" class="tips-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="smart-tips-content" id="smartTipsContent">
+            <div class="tip-item">💡 أضف صورة احترافية بخلفية بيضاء</div>
+        </div>
+    </div>
+
     <div class="builder-container">
         <aside class="builder-sidebar">
             <div class="sidebar-header">
@@ -231,6 +253,10 @@
                     <select id="templateSelect"></select>
                 </div>
                 <div class="preview-actions">
+                    <button class="btn btn-success" onclick="showATSCheck()"
+                        style="background: linear-gradient(135deg, #10b981, #059669)">
+                        <i class="fas fa-search-plus"></i> <span>فحص ATS</span>
+                    </button>
                     <button class="btn btn-glass" onclick="previewCV()"><i class="fas fa-eye"></i> <span
                             data-i18n="builder.preview">معاينة</span></button>
                     <button class="btn btn-primary" onclick="downloadCV()"><i class="fas fa-download"></i> <span
@@ -336,6 +362,32 @@
         </div>
     </div>
 
+    <!-- ATS Check Modal -->
+    <div class="modal" id="atsModal">
+        <div class="modal-content" style="max-width: 650px">
+            <button class="modal-close" onclick="closeModal('atsModal')">&times;</button>
+            <div class="modal-header">
+                <h2><i class="fas fa-search-plus" style="color: #10b981"></i> فحص ATS</h2>
+            </div>
+            <div class="modal-body">
+                <div class="ats-score-container">
+                    <div class="ats-score-circle" id="atsScoreCircle">
+                        <span class="ats-score-number" id="atsScoreNumber">0</span>
+                        <span class="ats-score-label">نقطة</span>
+                    </div>
+                    <div class="ats-score-status" id="atsScoreStatus">جاري التحليل...</div>
+                </div>
+                <div class="ats-details" id="atsDetails">
+                    <!-- سيتم ملؤها بـ JavaScript -->
+                </div>
+                <div class="ats-suggestions" id="atsSuggestions">
+                    <h4><i class="fas fa-lightbulb"></i> اقتراحات للتحسين</h4>
+                    <ul id="atsSuggestionsList"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- PayPal SDK -->
@@ -347,6 +399,7 @@
 
     <script src="js/i18n.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/smart-suggestions.js"></script>
     <script src="js/cv-builder.js"></script>
 
     <!-- PayPal and Google Integration -->
