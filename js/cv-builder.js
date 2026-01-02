@@ -26,6 +26,7 @@ let currentTemplate = 'modern';
 let userSubscription = null;
 let isLoggedIn = false;
 let paymentType = null;
+let currentSection = 'personal';
 
 // Counters for dynamic items
 let counters = { exp: 0, edu: 0, skill: 0, lang: 0, cert: 0, proj: 0, award: 0, ref: 0 };
@@ -35,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setupFormListeners();
     setupPhotoUpload();
     loadFromURL();
+    initProgressBar();
+    initSmartTips();
 });
 
 function initBuilder() {
@@ -53,6 +56,13 @@ function initBuilder() {
             content.classList.toggle('collapsed');
             icon.classList.toggle('fa-chevron-up');
             icon.classList.toggle('fa-chevron-down');
+
+            // Update current section for tips
+            const section = header.closest('.form-section');
+            if (section) {
+                currentSection = section.dataset.section || 'personal';
+                updateSmartTips(currentSection);
+            }
         });
     });
 
@@ -66,6 +76,14 @@ function initBuilder() {
 
     // Listen for language changes
     window.addEventListener('languageChanged', updatePreview);
+
+    // Setup section focus tracking
+    document.querySelectorAll('.form-section').forEach(section => {
+        section.addEventListener('focusin', () => {
+            currentSection = section.dataset.section || 'personal';
+            updateSmartTips(currentSection);
+        });
+    });
 }
 
 function loadFromURL() {
@@ -1452,4 +1470,357 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
     }, 100);
+});
+
+// ============== PROGRESS BAR SYSTEM ==============
+function initProgressBar() {
+    updateProgressBar();
+    // Update on any input change
+    document.querySelectorAll('#cvForm input, #cvForm textarea, #cvForm select').forEach(input => {
+        input.addEventListener('input', debounce(updateProgressBar, 300));
+        input.addEventListener('change', debounce(updateProgressBar, 300));
+    });
+}
+
+function calculateProgress() {
+    let score = 0;
+    let maxScore = 100;
+
+    // Personal Info (25 points)
+    if (cvData.firstName) score += 5;
+    if (cvData.lastName) score += 3;
+    if (cvData.jobTitle) score += 5;
+    if (cvData.email) score += 5;
+    if (cvData.phone) score += 4;
+    if (cvData.location) score += 3;
+
+    // Summary (10 points)
+    if (cvData.summary && cvData.summary.length > 50) score += 10;
+    else if (cvData.summary && cvData.summary.length > 20) score += 5;
+
+    // Experience (25 points)
+    const validExp = cvData.experience.filter(e => e.title && e.company);
+    if (validExp.length >= 2) score += 25;
+    else if (validExp.length === 1) score += 15;
+
+    // Education (15 points)
+    const validEdu = cvData.education.filter(e => e.degree && e.institution);
+    if (validEdu.length >= 1) score += 15;
+
+    // Skills (15 points)
+    const validSkills = cvData.skills.filter(s => s.name);
+    if (validSkills.length >= 5) score += 15;
+    else if (validSkills.length >= 3) score += 10;
+    else if (validSkills.length >= 1) score += 5;
+
+    // Languages (5 points)
+    const validLangs = cvData.languages.filter(l => l.name);
+    if (validLangs.length >= 1) score += 5;
+
+    // Extras (5 points)
+    if (cvData.certifications.some(c => c.name)) score += 2.5;
+    if (cvData.projects.some(p => p.name)) score += 2.5;
+
+    return Math.min(100, Math.round(score));
+}
+
+function updateProgressBar() {
+    const progress = calculateProgress();
+    const fill = document.getElementById('progressFill');
+    const percent = document.getElementById('progressPercent');
+    const tip = document.getElementById('progressTip');
+
+    if (fill) fill.style.width = progress + '%';
+    if (percent) percent.textContent = progress + '%';
+
+    // Update tip based on progress
+    if (tip) {
+        if (progress < 25) tip.textContent = '💡 ابدأ بإضافة معلوماتك الشخصية';
+        else if (progress < 50) tip.textContent = '📝 أضف خبراتك العملية والتعليم';
+        else if (progress < 75) tip.textContent = '🎯 أضف مهاراتك ولغاتك';
+        else if (progress < 100) tip.textContent = '✨ شارف على الانتهاء! أضف شهاداتك';
+        else tip.textContent = '🎉 ممتاز! سيرتك الذاتية مكتملة';
+    }
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// ============== SMART TIPS SYSTEM ==============
+function initSmartTips() {
+    updateSmartTips('personal');
+}
+
+function updateSmartTips(section) {
+    const content = document.getElementById('smartTipsContent');
+    if (!content || !window.smartSuggestions) return;
+
+    const tips = window.smartSuggestions.getAllTips(section);
+    if (tips.length === 0) return;
+
+    content.innerHTML = tips.map(tip => `<div class="tip-item">${tip}</div>`).join('');
+}
+
+function toggleTipsPanel() {
+    const panel = document.getElementById('smartTipsPanel');
+    if (panel) panel.classList.toggle('hidden');
+}
+
+// ============== ATS CHECK SYSTEM ==============
+function showATSCheck() {
+    document.getElementById('atsModal').classList.add('active');
+
+    // Animate the analysis
+    setTimeout(() => {
+        const result = analyzeATS();
+        displayATSResults(result);
+    }, 500);
+}
+
+function analyzeATS() {
+    let score = 0;
+    let details = [];
+    let suggestions = [];
+
+    // معلومات التواصل (15 نقطة)
+    let contactScore = 0;
+    if (cvData.email) contactScore += 5;
+    else suggestions.push('أضف بريدك الإلكتروني');
+    if (cvData.phone) contactScore += 5;
+    else suggestions.push('أضف رقم جوالك');
+    if (cvData.location) contactScore += 5;
+    else suggestions.push('أضف موقعك/مدينتك');
+
+    details.push({
+        name: 'معلومات التواصل',
+        score: contactScore,
+        max: 15,
+        status: contactScore >= 10 ? 'success' : contactScore >= 5 ? 'warning' : 'error'
+    });
+    score += contactScore;
+
+    // النبذة الشخصية (10 نقاط)
+    let summaryScore = 0;
+    if (cvData.summary && cvData.summary.length >= 100) {
+        summaryScore = 10;
+    } else if (cvData.summary && cvData.summary.length >= 50) {
+        summaryScore = 7;
+        suggestions.push('اجعل النبذة الشخصية أطول (100+ حرف)');
+    } else if (cvData.summary) {
+        summaryScore = 3;
+        suggestions.push('النبذة الشخصية قصيرة جداً');
+    } else {
+        suggestions.push('أضف نبذة شخصية مؤثرة');
+    }
+
+    details.push({
+        name: 'النبذة الشخصية',
+        score: summaryScore,
+        max: 10,
+        status: summaryScore >= 7 ? 'success' : summaryScore >= 3 ? 'warning' : 'error'
+    });
+    score += summaryScore;
+
+    // الخبرات العملية (25 نقطة)
+    let expScore = 0;
+    const validExp = cvData.experience.filter(e => e.title && e.company);
+    if (validExp.length >= 2) {
+        expScore = 25;
+    } else if (validExp.length === 1) {
+        expScore = 15;
+        suggestions.push('أضف المزيد من الخبرات العملية');
+    } else {
+        suggestions.push('أضف خبراتك العملية');
+    }
+
+    // Check for descriptions
+    const expWithDesc = validExp.filter(e => e.description && e.description.length > 30);
+    if (expWithDesc.length < validExp.length && validExp.length > 0) {
+        suggestions.push('أضف وصفاً تفصيلياً لكل خبرة عمل');
+    }
+
+    details.push({
+        name: 'الخبرات العملية',
+        score: expScore,
+        max: 25,
+        status: expScore >= 20 ? 'success' : expScore >= 10 ? 'warning' : 'error'
+    });
+    score += expScore;
+
+    // التعليم (15 نقطة)
+    let eduScore = 0;
+    const validEdu = cvData.education.filter(e => e.degree && e.institution);
+    if (validEdu.length >= 1) {
+        eduScore = 15;
+    } else {
+        suggestions.push('أضف تعليمك الأكاديمي');
+    }
+
+    details.push({
+        name: 'التعليم',
+        score: eduScore,
+        max: 15,
+        status: eduScore >= 15 ? 'success' : 'error'
+    });
+    score += eduScore;
+
+    // المهارات (20 نقطة)
+    let skillScore = 0;
+    const validSkills = cvData.skills.filter(s => s.name);
+    if (validSkills.length >= 7) {
+        skillScore = 20;
+    } else if (validSkills.length >= 5) {
+        skillScore = 15;
+        suggestions.push('أضف المزيد من المهارات (7+)');
+    } else if (validSkills.length >= 3) {
+        skillScore = 10;
+        suggestions.push('أضف المزيد من المهارات');
+    } else if (validSkills.length >= 1) {
+        skillScore = 5;
+        suggestions.push('أضف المزيد من المهارات التقنية والشخصية');
+    } else {
+        suggestions.push('أضف مهاراتك');
+    }
+
+    details.push({
+        name: 'المهارات',
+        score: skillScore,
+        max: 20,
+        status: skillScore >= 15 ? 'success' : skillScore >= 10 ? 'warning' : 'error'
+    });
+    score += skillScore;
+
+    // اللغات (10 نقاط)
+    let langScore = 0;
+    const validLangs = cvData.languages.filter(l => l.name);
+    if (validLangs.length >= 2) {
+        langScore = 10;
+    } else if (validLangs.length === 1) {
+        langScore = 7;
+        suggestions.push('أضف لغة ثانية');
+    } else {
+        suggestions.push('أضف اللغات التي تتقنها');
+    }
+
+    details.push({
+        name: 'اللغات',
+        score: langScore,
+        max: 10,
+        status: langScore >= 7 ? 'success' : 'error'
+    });
+    score += langScore;
+
+    // الإضافات (5 نقاط)
+    let extraScore = 0;
+    if (cvData.certifications.some(c => c.name)) extraScore += 2.5;
+    else suggestions.push('أضف شهاداتك المهنية');
+    if (cvData.projects.some(p => p.name)) extraScore += 2.5;
+    else suggestions.push('أضف مشاريعك');
+
+    details.push({
+        name: 'شهادات ومشاريع',
+        score: extraScore,
+        max: 5,
+        status: extraScore >= 5 ? 'success' : extraScore >= 2.5 ? 'warning' : 'error'
+    });
+    score += extraScore;
+
+    return {
+        score: Math.round(score),
+        details,
+        suggestions: suggestions.slice(0, 5) // Top 5 suggestions
+    };
+}
+
+function displayATSResults(result) {
+    const scoreNumber = document.getElementById('atsScoreNumber');
+    const scoreCircle = document.getElementById('atsScoreCircle');
+    const scoreStatus = document.getElementById('atsScoreStatus');
+    const detailsContainer = document.getElementById('atsDetails');
+    const suggestionsContainer = document.getElementById('atsSuggestionsList');
+
+    // Animate score
+    let currentScore = 0;
+    const scoreInterval = setInterval(() => {
+        currentScore += 2;
+        if (currentScore >= result.score) {
+            currentScore = result.score;
+            clearInterval(scoreInterval);
+        }
+        scoreNumber.textContent = currentScore;
+        scoreCircle.style.background = `conic-gradient(#10b981 ${currentScore * 3.6}deg, #e5e7eb ${currentScore * 3.6}deg)`;
+    }, 30);
+
+    // Set status
+    let statusText, statusClass;
+    if (result.score >= 85) {
+        statusText = 'ممتاز! سيرتك جاهزة';
+        statusClass = 'excellent';
+    } else if (result.score >= 70) {
+        statusText = 'جيد جداً';
+        statusClass = 'good';
+    } else if (result.score >= 50) {
+        statusText = 'يحتاج تحسين';
+        statusClass = 'needs-work';
+    } else {
+        statusText = 'يحتاج عمل كثير';
+        statusClass = 'poor';
+    }
+
+    scoreStatus.textContent = statusText;
+    scoreStatus.className = 'ats-score-status ' + statusClass;
+
+    // Display details
+    detailsContainer.innerHTML = result.details.map(d => `
+        <div class="ats-detail-item">
+            <div class="ats-detail-icon ${d.status}">
+                <i class="fas ${d.status === 'success' ? 'fa-check' : d.status === 'warning' ? 'fa-exclamation' : 'fa-times'}"></i>
+            </div>
+            <div class="ats-detail-info">
+                <div class="ats-detail-name">${d.name}</div>
+                <div class="ats-detail-status" style="color: ${d.status === 'success' ? '#10b981' : d.status === 'warning' ? '#f59e0b' : '#ef4444'}">${d.score}/${d.max}</div>
+            </div>
+        </div>
+    `).join('');
+
+    // Display suggestions
+    if (result.suggestions.length > 0) {
+        suggestionsContainer.innerHTML = result.suggestions.map(s => `<li>${s}</li>`).join('');
+        document.getElementById('atsSuggestions').style.display = 'block';
+    } else {
+        document.getElementById('atsSuggestions').style.display = 'none';
+    }
+}
+
+// ============== JOB-BASED SUGGESTIONS ==============
+function getSuggestionsForJob() {
+    if (!window.smartSuggestions || !cvData.jobTitle) return;
+
+    const suggestions = window.smartSuggestions.getSuggestions(cvData.jobTitle);
+
+    if (suggestions.summary && !cvData.summary) {
+        const summaryField = document.getElementById('summary');
+        if (summaryField && confirm('هل تريد استخدام نبذة شخصية مقترحة؟')) {
+            summaryField.value = suggestions.summary;
+            cvData.summary = suggestions.summary;
+            updatePreview();
+        }
+    }
+}
+
+// Watch for job title changes
+document.addEventListener('DOMContentLoaded', () => {
+    const jobTitleInput = document.getElementById('jobTitle');
+    if (jobTitleInput) {
+        jobTitleInput.addEventListener('blur', getSuggestionsForJob);
+    }
 });
