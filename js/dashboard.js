@@ -191,21 +191,47 @@ function initAuthTabs() {
 }
 
 // Google Login
-async function loginWithGoogle() {
-    // Simulate Google login for now
-    // In production, use Firebase Auth or Google Sign-In
-    const mockGoogleUser = {
-        google_id: 'google_' + Date.now(),
-        email: 'user@gmail.com',
-        name: 'مستخدم Google',
-        avatar: 'https://via.placeholder.com/80'
-    };
+const GOOGLE_CLIENT_ID = '691185500630-jqe1usmacp4orbg06bbaqdkcq68kn96o.apps.googleusercontent.com';
 
+// Initialize Google Sign-In
+function initGoogleSignIn() {
+    if (typeof google !== 'undefined' && google.accounts) {
+        google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleGoogleCredentialResponse,
+            auto_select: false,
+            ux_mode: 'popup'
+        });
+    }
+}
+
+// Handle Google Sign-In response
+function handleGoogleCredentialResponse(response) {
+    const credential = response.credential;
+    // Decode JWT to get user info
+    const base64Url = credential.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+
+    const userInfo = JSON.parse(jsonPayload);
+
+    // Send to backend
+    processGoogleLogin({
+        google_id: userInfo.sub,
+        email: userInfo.email,
+        name: userInfo.name,
+        avatar: userInfo.picture
+    });
+}
+
+async function processGoogleLogin(googleUser) {
     try {
         const response = await fetch(`${API_BASE}/auth.php?action=google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(mockGoogleUser)
+            body: JSON.stringify(googleUser)
         });
         const data = await response.json();
 
@@ -221,6 +247,23 @@ async function loginWithGoogle() {
         console.error('Google login error:', error);
     }
 }
+
+async function loginWithGoogle() {
+    if (typeof google !== 'undefined' && google.accounts) {
+        google.accounts.id.prompt();
+    } else {
+        // Fallback: Use OAuth popup
+        const redirectUri = 'https://making-cv.vercel.app/';
+        const scope = 'email profile';
+        const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}`;
+        window.open(authUrl, '_blank', 'width=500,height=600');
+    }
+}
+
+// Initialize Google Sign-In when page loads
+window.addEventListener('load', () => {
+    setTimeout(initGoogleSignIn, 500);
+});
 
 // Color Pickers
 function initColorPickers() {
