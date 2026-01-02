@@ -1,5 +1,5 @@
 <?php
-// Pricing & Coupons API
+// Pricing API
 require_once 'config.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -10,18 +10,6 @@ switch ($action) {
         if ($method !== 'GET')
             jsonResponse(['error' => 'Method not allowed'], 405);
         getPlans();
-        break;
-
-    case 'validate-coupon':
-        if ($method !== 'POST')
-            jsonResponse(['error' => 'Method not allowed'], 405);
-        validateCoupon();
-        break;
-
-    case 'apply-coupon':
-        if ($method !== 'POST')
-            jsonResponse(['error' => 'Method not allowed'], 405);
-        applyCouponToPrice();
         break;
 
     case 'purchase':
@@ -72,21 +60,12 @@ function getPlans()
             'badge' => 'الأكثر طلباً',
             'badge_en' => 'Most Popular'
         ],
-        'lifetime' => [
-            'name' => 'مدى الحياة',
-            'name_en' => 'Lifetime',
-            'price_sar' => 79,
-            'price_usd' => 21,
-            'features' => ['تحميلات غير محدودة للأبد', 'جميع القوالب', 'دعم VIP', 'قوالب حصرية', 'تحديثات مجانية'],
-            'features_en' => ['Unlimited Downloads Forever', 'All Templates', 'VIP Support', 'Exclusive Templates', 'Free Updates'],
-            'badge' => '⭐ أفضل قيمة',
-            'badge_en' => '⭐ Best Value'
-        ],
         'business' => [
             'name' => 'الشركات',
             'name_en' => 'Business',
             'price_sar' => 199,
             'price_usd' => 53,
+            'type' => 'monthly',
             'features' => ['50 مستخدم', 'لوحة تحكم', 'تقارير', 'دعم مخصص', 'براندينج مخصص'],
             'features_en' => ['50 Users', 'Dashboard', 'Reports', 'Custom Support', 'Custom Branding'],
             'badge' => '🏢 للشركات',
@@ -112,93 +91,7 @@ function getPlans()
     ]);
 }
 
-// ============== COUPONS ==============
-function getCoupons()
-{
-    return [
-        'WELCOME20' => ['discount' => 0.20, 'type' => 'percent', 'desc' => 'خصم ترحيبي 20%'],
-        'FIRST50' => ['discount' => 0.50, 'type' => 'percent', 'desc' => 'خصم 50%'],
-        'SUPER70' => ['discount' => 0.70, 'type' => 'percent', 'desc' => 'خصم قوي 70%!'],
-        'VIP80' => ['discount' => 0.80, 'type' => 'percent', 'desc' => 'خصم VIP 80%'],
-        'FREE25' => ['discount' => 25, 'type' => 'fixed', 'desc' => 'خصم 25 ريال'],
-        'LAUNCH30' => ['discount' => 0.30, 'type' => 'percent', 'desc' => 'خصم إطلاق 30%'],
-        'STUDENT40' => ['discount' => 0.40, 'type' => 'percent', 'desc' => 'خصم طلابي 40%'],
-        'NEWYEAR50' => ['discount' => 0.50, 'type' => 'percent', 'desc' => 'عرض السنة الجديدة 50%'],
-        'SPECIAL90' => ['discount' => 0.90, 'type' => 'percent', 'desc' => 'عرض خاص 90%!']
-    ];
-}
 
-function validateCoupon()
-{
-    $input = getInput();
-    $code = strtoupper(trim($input['code'] ?? ''));
-
-    if (empty($code)) {
-        jsonResponse(['error' => 'يرجى إدخال كود الخصم'], 400);
-    }
-
-    $coupons = getCoupons();
-
-    if (isset($coupons[$code])) {
-        $coupon = $coupons[$code];
-        jsonResponse([
-            'valid' => true,
-            'code' => $code,
-            'discount' => $coupon['discount'],
-            'type' => $coupon['type'],
-            'description' => $coupon['desc'],
-            'message' => 'تم تطبيق الكوبون بنجاح! ' . $coupon['desc']
-        ]);
-    } else {
-        jsonResponse([
-            'valid' => false,
-            'error' => 'كود الخصم غير صالح'
-        ], 400);
-    }
-}
-
-function applyCouponToPrice()
-{
-    $input = getInput();
-    $code = strtoupper(trim($input['code'] ?? ''));
-    $plan = $input['plan'] ?? 'monthly';
-    $currency = $input['currency'] ?? 'sar';
-
-    $coupons = getCoupons();
-    $plans = [
-        'single' => ['sar' => 5, 'usd' => 1.5],
-        'monthly' => ['sar' => 29, 'usd' => 8],
-        'lifetime' => ['sar' => 79, 'usd' => 21],
-        'business' => ['sar' => 199, 'usd' => 53]
-    ];
-
-    if (!isset($plans[$plan])) {
-        jsonResponse(['error' => 'خطة غير صالحة'], 400);
-    }
-
-    $originalPrice = $plans[$plan][$currency];
-    $finalPrice = $originalPrice;
-    $discount = 0;
-
-    if (!empty($code) && isset($coupons[$code])) {
-        $coupon = $coupons[$code];
-        if ($coupon['type'] === 'percent') {
-            $discount = $originalPrice * $coupon['discount'];
-        } else {
-            $discount = min($coupon['discount'], $originalPrice);
-        }
-        $finalPrice = max(0, $originalPrice - $discount);
-    }
-
-    jsonResponse([
-        'plan' => $plan,
-        'currency' => $currency,
-        'original_price' => $originalPrice,
-        'discount' => round($discount, 2),
-        'final_price' => round($finalPrice, 2),
-        'coupon_applied' => !empty($code) && isset($coupons[$code])
-    ]);
-}
 
 // ============== PURCHASE ==============
 function processPurchase()
@@ -208,14 +101,12 @@ function processPurchase()
 
     $plan = $input['plan'] ?? 'monthly';
     $paymentMethod = $input['payment_method'] ?? 'paypal';
-    $coupon = strtoupper(trim($input['coupon'] ?? ''));
     $transactionId = $input['transaction_id'] ?? null;
 
     $plans = [
         'single' => ['sar' => 5, 'usd' => 1.5, 'downloads' => 1, 'type' => 'single'],
         'monthly' => ['sar' => 29, 'usd' => 8, 'downloads' => -1, 'type' => 'subscription'],
-        'lifetime' => ['sar' => 79, 'usd' => 21, 'downloads' => -1, 'type' => 'lifetime'],
-        'business' => ['sar' => 199, 'usd' => 53, 'downloads' => -1, 'type' => 'business']
+        'business' => ['sar' => 199, 'usd' => 53, 'downloads' => -1, 'type' => 'subscription']
     ];
 
     if (!isset($plans[$plan])) {
@@ -228,9 +119,8 @@ function processPurchase()
     $subscriptionType = $plan;
     $expiresAt = null;
 
-    if ($plan === 'monthly') {
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
-    } elseif ($plan === 'business') {
+    // Monthly and business are both subscription-based
+    if ($plan === 'monthly' || $plan === 'business') {
         $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
     }
 
@@ -245,16 +135,15 @@ function processPurchase()
 
     // Log purchase
     $stmt = $db->prepare("
-        INSERT INTO purchases (user_id, plan, amount, currency, payment_method, transaction_id, coupon_code)
-        VALUES (?, ?, ?, 'SAR', ?, ?, ?)
+        INSERT INTO purchases (user_id, plan, amount, currency, payment_method, transaction_id)
+        VALUES (?, ?, ?, 'SAR', ?, ?)
     ");
     $stmt->execute([
         $user['id'],
         $plan,
         $plans[$plan]['sar'],
         $paymentMethod,
-        $transactionId,
-        $coupon ?: null
+        $transactionId
     ]);
 
     jsonResponse([
@@ -283,7 +172,6 @@ function getUserSubscription()
         'free' => ['watermark' => true, 'downloads' => 0, 'templates' => 'basic'],
         'single' => ['watermark' => false, 'downloads' => 1, 'templates' => 'all'],
         'monthly' => ['watermark' => false, 'downloads' => -1, 'templates' => 'all'],
-        'lifetime' => ['watermark' => false, 'downloads' => -1, 'templates' => 'all'],
         'business' => ['watermark' => false, 'downloads' => -1, 'templates' => 'all', 'users' => 50]
     ];
 
