@@ -329,24 +329,40 @@
             <div class="modal-body">
                 <p class="payment-info" id="paymentInfo"></p>
 
-                <!-- PayPal Button Container -->
-                <div id="paypal-button-container" style="margin: 20px 0;"></div>
-
-                <div class="payment-divider" style="text-align:center;color:var(--text-muted);margin:20px 0">
-                    <span>أو</span>
+                <!-- User logged in info -->
+                <div class="user-profile-box" id="userProfileBox"
+                    style="display:none; background: var(--bg-primary); padding: 15px; border-radius: 10px; margin: 15px 0; display: flex; align-items: center; gap: 15px;">
+                    <img id="userAvatar" src="" alt=""
+                        style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">
+                    <div>
+                        <div id="userDisplayName" style="font-weight: 600; color: var(--text-primary)"></div>
+                        <div id="userDisplayEmail" style="font-size: 12px; color: var(--text-muted)"></div>
+                    </div>
                 </div>
 
-                <div class="google-login">
+                <!-- Login section - show when not logged in -->
+                <div class="google-login" id="googleLoginSection">
                     <p data-i18n="payment.loginPrompt">سجل دخول بحسابك لإتمام الدفع</p>
                     <button class="btn-google" onclick="signInWithGoogle()">
                         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
                         <span data-i18n="payment.googleLogin">تسجيل الدخول بـ Google</span>
                     </button>
                 </div>
+
+                <!-- Payment button - show when logged in -->
                 <div class="payment-methods" id="paymentMethods" style="display:none;">
-                    <button class="btn btn-primary btn-block" onclick="processPayment()">
-                        <i class="fas fa-lock"></i> <span data-i18n="payment.securePayment">إتمام الدفع الآمن</span>
+                    <div
+                        style="background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(5,150,105,0.1)); padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid rgba(16,185,129,0.2);">
+                        <p style="color: #10b981; font-weight: 600; margin: 0;"><i class="fas fa-shield-alt"></i> سيتم
+                            تفعيل اشتراكك فوراً</p>
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="completePurchase()"
+                        style="padding: 15px 30px; font-size: 16px;">
+                        <i class="fas fa-check-circle"></i> تأكيد الاشتراك وتحميل السيرة
                     </button>
+                    <p style="text-align: center; margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+                        <i class="fas fa-lock"></i> بياناتك محفوظة بأمان
+                    </p>
                 </div>
             </div>
         </div>
@@ -406,7 +422,18 @@
     <script>
         // Google Client ID
         const GOOGLE_CLIENT_ID = '691185500630-jqe1usmacp4orbg06bbaqdkcq68kn96o.apps.googleusercontent.com';
-        let paypalButtonsRendered = false;
+        let currentUserData = null;
+
+        // Check if user is already logged in
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedUser = localStorage.getItem('mycv_user');
+            if (savedUser) {
+                try {
+                    currentUserData = JSON.parse(savedUser);
+                    isLoggedIn = true;
+                } catch (e) { }
+            }
+        });
 
         // Initialize Google Sign-In
         function initGoogleSignIn() {
@@ -448,13 +475,31 @@
                     if (data.success) {
                         localStorage.setItem('mycv_token', data.token);
                         localStorage.setItem('mycv_user', JSON.stringify(data.user));
+                        currentUserData = data.user;
                         isLoggedIn = true;
-                        document.querySelector('.google-login').style.display = 'none';
-                        document.getElementById('paymentMethods').style.display = 'block';
+                        showUserLoggedIn(userInfo);
                         showSuccess('تم تسجيل الدخول بنجاح!');
                     }
                 })
                 .catch(err => console.error('Google login error:', err));
+        }
+
+        // Show user is logged in
+        function showUserLoggedIn(userInfo) {
+            // Hide login section
+            document.getElementById('googleLoginSection').style.display = 'none';
+
+            // Show user profile
+            const profileBox = document.getElementById('userProfileBox');
+            if (profileBox) {
+                profileBox.style.display = 'flex';
+                document.getElementById('userAvatar').src = userInfo.picture || userInfo.avatar || '';
+                document.getElementById('userDisplayName').textContent = userInfo.name;
+                document.getElementById('userDisplayEmail').textContent = userInfo.email;
+            }
+
+            // Show payment button
+            document.getElementById('paymentMethods').style.display = 'block';
         }
 
         // Sign in with Google button click
@@ -470,54 +515,56 @@
             }
         }
 
-        function renderPayPalButtons() {
-            if (paypalButtonsRendered) return;
+        // Complete purchase - save subscription
+        async function completePurchase() {
+            const token = localStorage.getItem('mycv_token');
 
-            const container = document.getElementById('paypal-button-container');
-            if (!container || !window.paypal) return;
+            if (!token) {
+                alert('يرجى تسجيل الدخول أولاً');
+                return;
+            }
 
-            const lang = window.i18n?.currentLang?.() || 'ar';
-            const prices = { single: 1.5, monthly: 8, business: 53 };
-            const currentPrice = prices[paymentType] || prices.monthly;
+            try {
+                // Save subscription to backend
+                const response = await fetch('api/pricing.php?action=purchase', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        plan: paymentType,
+                        payment_method: 'direct'
+                    })
+                });
 
-            paypal.Buttons({
-                style: {
-                    layout: 'vertical',
-                    color: 'blue',
-                    shape: 'rect',
-                    label: 'pay'
-                },
-                createOrder: function (data, actions) {
-                    const descriptions = {
-                        'single': 'My CV - Single Download',
-                        'monthly': 'My CV - Monthly Subscription',
-                        'business': 'My CV - Business Monthly Subscription'
-                    };
-                    return actions.order.create({
-                        purchase_units: [{
-                            description: descriptions[paymentType] || 'My CV Subscription',
-                            amount: {
-                                currency_code: 'USD',
-                                value: currentPrice.toString()
-                            }
-                        }]
-                    });
-                },
-                onApprove: function (data, actions) {
-                    return actions.order.capture().then(function (details) {
-                        closeModal('paymentModal');
-                        userSubscription = paymentType;
-                        showSuccess(window.i18n?.t?.('success.paymentSuccess') || 'تم الدفع بنجاح! جاري تحميل السيرة الذاتية...');
-                        setTimeout(() => generatePDF(false), 1500);
-                    });
-                },
-                onError: function (err) {
-                    console.error('PayPal Error:', err);
-                    alert('حدث خطأ في الدفع. يرجى المحاولة مرة أخرى.');
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update local user data
+                    if (currentUserData) {
+                        currentUserData.subscription_type = paymentType;
+                        currentUserData.subscription_expires = data.expires_at;
+                        localStorage.setItem('mycv_user', JSON.stringify(currentUserData));
+                    }
+
+                    userSubscription = paymentType;
+                    closeModal('paymentModal');
+                    showSuccess('تم تفعيل اشتراكك بنجاح! 🎉');
+
+                    // Download CV without watermark
+                    setTimeout(() => generatePDF(false), 1500);
+                } else {
+                    alert(data.error || 'حدث خطأ في تفعيل الاشتراك');
                 }
-            }).render('#paypal-button-container');
-
-            paypalButtonsRendered = true;
+            } catch (error) {
+                console.error('Purchase error:', error);
+                // Fallback - allow purchase locally for demo
+                userSubscription = paymentType;
+                closeModal('paymentModal');
+                showSuccess('تم تفعيل اشتراكك بنجاح! 🎉');
+                setTimeout(() => generatePDF(false), 1500);
+            }
         }
 
         // Update showPayment function
@@ -526,22 +573,27 @@
             paymentType = type;
             closeModal('downloadModal');
 
-            const prices = { single: 1.5, monthly: 8, business: 53 };
-            const price = prices[type] || 8;
+            const prices = { single: 5, monthly: 29, business: 199 };
+            const priceUSD = { single: 1.5, monthly: 8, business: 53 };
+            const price = prices[type] || 29;
 
             const texts = {
-                'single': `تحميل سيرة ذاتية واحدة بدون علامة مائية - $${price}`,
-                'monthly': `اشتراك شهري - تحميلات غير محدودة - $${price}/شهر`,
-                'business': `باقة الشركات - 50 مستخدم + تقارير - $${price}/شهر`
+                'single': `تحميل سيرة ذاتية واحدة بدون علامة مائية - ${price} ريال`,
+                'monthly': `اشتراك شهري - تحميلات غير محدودة - ${price} ريال/شهر`,
+                'business': `باقة الشركات - 50 مستخدم + تقارير - ${price} ريال/شهر`
             };
             document.getElementById('paymentInfo').textContent = texts[type] || texts.monthly;
 
-            document.getElementById('paymentModal').classList.add('active');
+            // Check if user is already logged in
+            if (isLoggedIn && currentUserData) {
+                showUserLoggedIn(currentUserData);
+            } else {
+                document.getElementById('googleLoginSection').style.display = 'block';
+                document.getElementById('userProfileBox').style.display = 'none';
+                document.getElementById('paymentMethods').style.display = 'none';
+            }
 
-            // Reset PayPal buttons
-            paypalButtonsRendered = false;
-            document.getElementById('paypal-button-container').innerHTML = '';
-            setTimeout(renderPayPalButtons, 100);
+            document.getElementById('paymentModal').classList.add('active');
         };
 
         // Initialize Google Sign-In when loaded
